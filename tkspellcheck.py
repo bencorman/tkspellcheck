@@ -5,22 +5,34 @@ from enchant.checker import SpellChecker
 
 
 class tkSpellCheck:
-    def __init__(self, textwidget, lang='en_US', enabled=False):
+    def __init__(self, textwidget, lang='en_US'):
         self.textwidget = textwidget
         self.swords = enchant.Dict(lang)        # S(uggested) Words, obviously
         self.checker = SpellChecker(lang)
-        self.__initialize(enabled)
+        self.sp_err = {}
 
-    def __initialize(self, enabled):
-        '''TODO: determine whether we should be firing or not '''
-        self.check_spelling()
+    def __call__(self, mode=False):
+        if mode == 'init':
+            self.fullcheck()
+        if mode == 'inline':
+            self.inlinecheck()
+        if not mode:
+            self.destroy_tags()
 
-    def check_spelling(self):
-        text = self.__rtntxt()
+    def destroy_tags(self):
+        if self.sp_err:
+            for tag in self.sp_err.keys():
+                mrk = self.sp_err[tag][1]
+                self.textwidget.tag_delete(tag)
+                self.textwidget.mark_unset(mrk)
+            self.sp_err = {}  # Reset the dictionary for next time
+
+    def fullcheck(self):
+        self.destroy_tags()
+        text = self.__alltxt()
         self.checker.set_text(text)
         i = 1
         curpos = 1.0
-        self.sp_err = {}
 
         for err in self.checker:
             tag = '{0}-{1}'.format(err.word, i)
@@ -41,9 +53,10 @@ class tkSpellCheck:
         err = self.sp_err[tag][0]
         suggested_words = self.__suggest(err)
         context_menu = self.__build_cnxtmnu(tag, suggested_words)
+        print event.x_root, event.y_root
         context_menu.tk_popup(event.x_root, event.y_root)
 
-    def __rtntxt(self):
+    def __alltxt(self):
         return self.textwidget.get(1.0, END)
 
     def __suggest(self, err):
