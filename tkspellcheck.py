@@ -1,4 +1,4 @@
-from Tkinter import Text, Menu, RIGHT, LEFT, END
+from Tkinter import *
 from ttk import *
 import enchant
 from enchant.checker import SpellChecker
@@ -47,21 +47,34 @@ class CkTxt(AlertMixin, Text):
         self.bind('<<Modified>>', lambda e: None)
 
     def fire_on_alert(self, event=None):
-        start = time.time()
+        stime = time.time()
         self.after_idle(self._fire)
-        ttime = (time.time() - start)
-        print ttime
+        ftime = (time.time() - stime)
+        print ftime
 
     def _fire(self):
-        self._clear_tags()
         self._check()
 
     def _firstcheck(self):
-        self._check()
+        self._check(first=True)
 
-    def _check(self):
-        curpos = '1.0'
-        text = self.get('1.0', END)
+    def _findpos(self):
+        line = int(self.index(INSERT).split('.')[0])
+        start = line - 2
+        end = line + 2
+        startpos = '{0}.0'.format(start)
+        endpos = '{0}.0'.format(end)
+        return (startpos, endpos)
+
+    def _check(self, first=False):
+        if first:
+            startpos = '1.0'
+            endpos = 'end'
+        else:
+            startpos, endpos = self._findpos()
+        curpos = startpos
+        self._clear_tags(startpos, endpos)
+        text = self.get(startpos, endpos)
         self.checker.set_text(text)
         for err in self.checker:
             firstpos = self.search(err.word, curpos, END)
@@ -75,7 +88,6 @@ class CkTxt(AlertMixin, Text):
             self.mark_gravity(markleft, LEFT)
             self.mark_gravity(markright, RIGHT)
             self.tag_add(tag, markleft, markright)
-            self.tag_add(tag, firstpos, lastpos)
             self.tag_bind(tag, '<Button-3>', lambda evt,
                           tag=tag: self._get_suggestions(evt, tag))
             self.spellingerrors[tag] = (err.word, markleft, markright,
@@ -90,7 +102,7 @@ class CkTxt(AlertMixin, Text):
         context_menu.tk_popup(evt.x_root, evt.y_root)
 
     def _suggest(self, err):
-        return self.suggest_words.suggest(err)
+        return self.checker.suggest(err)
 
     def _generate_contextmenu(self, tag, suggested):
         contextmenu = Menu(self, tearoff=False)
@@ -113,6 +125,7 @@ class CkTxt(AlertMixin, Text):
             self.mark_unset(i)
         del self.spellingerrors[tag]
 
-    def _clear_tags(self):
+    def _clear_tags(self, startpos, endpos):
         for tag in self.spellingerrors.keys():
-            self._delete_tag(tag)
+            self.tag_remove(tag, startpos, endpos)
+            #self._delete_tag(tag)
