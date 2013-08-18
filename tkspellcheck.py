@@ -1,99 +1,100 @@
-from Tkinter import *
-from ttk import *
-import enchant
+import tk
+from ScrolledText import ScrolledText
 from enchant.checker import SpellChecker
 from enchant.tokenize import EmailFilter, URLFilter, HTMLChunker
-import time
 
-
-class AlertMixin(object):
-
-    def initialize_alerts(self):
-        self.reset_flag()
-        self.bind('<<Modified>>', self._textevent)
-
-    def _textevent(self, event=None):
-        if not self._flag_reset:
-            self.reset_flag()
-            self.fire_on_alert(event)
-
-    def fire_on_alert(self, event=None):
-        pass
-
-    def reset_flag(self):
-        """http://epydoc.sourceforge.net/stdlib/Tkinter.Text-class.html#edit_modified"""
-        self._flag_reset = True
-        self.edit_modified(False)
-        self._flag_reset = False
-
-
-class CkTxt(AlertMixin, Text):
-    def __init__(self, master=None, cnf={}, **kw):
-        Text.__init__(self, master, cnf, **kw)
-
-    def enable(self, lang='en_US'):
-        self.spellingerrors = {}
-        self.suggest_words = enchant.Dict(lang)
-        self.checker = SpellChecker(lang, filters=[EmailFilter, URLFilter], chunkers=[HTMLChunker])
-        self.counter = 0
-        self._firstcheck()
+class ContextAwareTxt(ScrolledText):
+    """http://code.activestate.com/recipes/464635-call-a-callback-when-a-tkintertext-is-modified/"""
+    def __init__(self, master, **kw):
+        ScrolledText.__init__(self, master, **kw)
         self.initialize_alerts()
 
-    def disable(self):
-        self._clear_tags()
-        self._clearbindings()
+    def initialize_alerts(self):
+        self._reset_alert_flag()
+        self.bind('<<Modified>>', self._alert_modified)
+        self.bind('<<Cut>>', self._alert_cut)
+        self.bind('<<Paste>>', self._alert_paste)
 
-    def _clearbindings(self):
-        self.bind('<<Modified>>', lambda e: None)
+    def terminate_alerts(self):
+        self.bind('<<Modified>>', self._apathetic)
+        self.bind('<<Cut>>', self._apathetic)
+        self.bind('<<Paste>>', self._apathetic)
 
-    def fire_on_alert(self, event=None):
-        stime = time.time()
-        self.after_idle(self._fire)
-        ftime = (time.time() - stime)
-        print ftime
+    def _alert_modified(self, event):
+        if not self._resetting_alert_flag:
+            self._reset_alert_flag()
+            self.fire_on_modified(event)
+
+    def _alert_cut(self, event):
+        self.fire_on_cut(event)
+
+    def _alert_paste(self, event):
+        self.fire_on_paste(event)
+
+    def _reset_alert_flag(self):
+        """http://epydoc.sourceforge.net/stdlib/Tkinter.Text-class.html#edit_modified"""
+        self._resetting_alert_flag = True
+        self.edit_modified(False)
+        self._resetting_alert_flag = False
+
+    def _apathetic(self, event=None):
+        pass
+
+    def _setup_spellcheckr(self):
+        self.spellingerrors = {}
+        self.counter = 0
+        self.checker = SpellChecker(self.lang, filters=[EmailFilter, URLFilter], chunkers=[HTMLChunker])
+
+    def fire_on_textevent(self, event=None):
+        #self.after_idle(self._fire)
+        #self.after(100, self._fire)
+        self._fire()
 
     def _fire(self):
-        self._check()
+        print "_fire!"
+        startpos, endpos = self._findposition()
+        self._check_spelling(startpos, endpos)
 
-    def _firstcheck(self):
-        self._check(first=True)
-
-    def _findpos(self):
-        line = int(self.index(INSERT).split('.')[0])
-        start = line - 2
-        end = line + 2
+    def _findposition(self):
+        currentline = int(self.index(tk.INSERT).split('.')[0])
+        start = currentline - 1
+        end = currentline + 1
         startpos = '{0}.0'.format(start)
         endpos = '{0}.0'.format(end)
         return (startpos, endpos)
 
-    def _check(self, first=False):
-        if first:
-            startpos = '1.0'
-            endpos = 'end'
-        else:
-            startpos, endpos = self._findpos()
-        curpos = startpos
+    def _check_spelling(self, startpos, endpos):
+        currentpos = startpos
         self._clear_tags(startpos, endpos)
-        text = self.get(startpos, endpos)
+        text = self._get_text(startpos, endpos)
         self.checker.set_text(text)
         for err in self.checker:
-            firstpos = self.search(err.word, curpos, END)
-            lastpos = firstpos + ('+%dchars' % len(err.word))
-            tag = '{0}-{1}'.format(err.word, self.counter)
-            markleft = 'left-{0}'.format(tag)
-            markright = 'right-{0}'.format(tag)
-            self.tag_config(tag, background="yellow", foreground="red", underline=True)
-            self.mark_set(markleft, firstpos)
-            self.mark_set(markright, lastpos)
-            self.mark_gravity(markleft, LEFT)
-            self.mark_gravity(markright, RIGHT)
-            self.tag_add(tag, markleft, markright)
-            self.tag_bind(tag, '<Button-3>', lambda evt,
-                          tag=tag: self._get_suggestions(evt, tag))
-            self.spellingerrors[tag] = (err.word, markleft, markright,
-                                        self.counter)
+            begintag, endtag = self._wordposition(err.word, currentpos, endpos)
+            self._tag_word(err.word, begintag, endtag)
             self.counter += 1
-            curpos = lastpos
+            currentpos = endtag
+
+    def _tag_word(self, word, begintag, endtag):
+        tag = '{0}-{1}'.format(word, self.counter)
+        markleft = 'left-{0}'.format(tag)
+        markright = 'right-{0}'.format(tag)
+        self.tag_config(tag, background="yellow", foreground="red", underline=True)
+        self.mark_set(markleft, begintag)
+        self.mark_set(markright, endtag)
+        self.mark_gravity(markleft, tk.LEFT)
+        self.mark_gravity(markright, tk.RIGHT)
+        self.tag_add(tag, markleft, markright)
+        self.tag_bind(tag, '<Button-3>', lambda evt,
+                      tag=tag: self._get_suggestions(evt, tag))
+        self.spellingerrors[tag] = (word, markleft, markright, self.counter)
+
+    def _wordposition(self, word, startsearch, endsearch):
+        starts = self.search(word, startsearch, endsearch)
+        ends = starts + ('+%dchars' % len(word))
+        return (starts, ends)
+
+    def _get_text(self, startpos, endpos):
+        return self.get(startpos, endpos)
 
     def _get_suggestions(self, evt, tag):
         err = self.spellingerrors[tag][0]
@@ -105,7 +106,7 @@ class CkTxt(AlertMixin, Text):
         return self.checker.suggest(err)
 
     def _generate_contextmenu(self, tag, suggested):
-        contextmenu = Menu(self, tearoff=False)
+        contextmenu = tk.Menu(self, tearoff=False)
         for word in suggested:
             contextmenu.add_command(label=word, command=lambda tag=tag,
                                     word=word: self._replace(tag, word))
@@ -115,17 +116,39 @@ class CkTxt(AlertMixin, Text):
         firstpos, lastpos = self._tagranges(tag)
         self.delete(firstpos, lastpos)
         self.insert(firstpos, word)
+        self._delete_tag(tag)
 
     def _tagranges(self, tag):
         return self.tag_ranges(tag)
 
-    def _delete_tag(self, tag):
-        self.tag_delete(tag)
-        for i in (self.spellingerrors[tag][1], self.spellingerrors[tag][2]):
-            self.mark_unset(i)
-        del self.spellingerrors[tag]
-
     def _clear_tags(self, startpos, endpos):
         for tag in self.spellingerrors.keys():
             self.tag_remove(tag, startpos, endpos)
-            #self._delete_tag(tag)
+
+    def _delete_tag(self, tag):
+        left = self.spellingerrors[tag][1]
+        right = self.spellingerrors[tag][2]
+        self.mark_unset(left)
+        self.mark_unset(right)
+        self.tag_delete(tag)
+        del self.spellingerrors[tag]
+
+    def _delete_all_tags(self):
+        for tag in self.spellingerrors.keys():
+            self._delete_tag(tag)
+
+class SpellCheck(object):
+    def __init__(self, **kw):
+        self.spellingerrors = {}
+        self.counter = 0
+        self._lang = kw.get('lang', 'en_US')
+        self._filtr = kw.get('filters', [EmailFilter, URLFilter])
+        self._chunkr = kw.get('chunkers', [HTMLChunker])
+        self.checker = SpellChecker(self._lang, filters=self._filtr, chunkers=self._chunkr)
+
+    def check(self, text):
+        sorry_slick = []
+        self.checker.set_text(text)
+        for fuckyou in self.checker:
+            sorry_slick.append(fuckyou.word)
+        return sorry_slick
