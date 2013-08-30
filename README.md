@@ -9,10 +9,10 @@ I'm currently testing, although with good results. But for that reason, it's rat
 
 If you'd like to see it in action, you'll need:
 
-- Python 2 (Tested on 2.7.4)
+- Python 2 (Tested on 2.7.4)  
 - [PyEnchant](http://pythonhosted.org/pyenchant/) (Tested 1.6.5)
 
-$ git clone https://github.com/bencorman/tkspellcheck.git
+$ git clone https://github.com/bencorman/tkspellcheck.git  
 $ python tkspellcheck_example.py
 
 
