@@ -19,4 +19,4 @@ $ python tkspellcheck_example.py
 Disclaimer
 ==========
 
-This is both my first github project and my first python application. So comments / suggestions / advice is both welcome and greatly appreciated.
+This is both my first github project and my first open source python application. So comments / suggestions / advice is both welcome and greatly appreciated.
